@@ -64,7 +64,6 @@ Inspired by successful apps like CodeEdit, Cork, and Reminders MenuBar, we follo
    ```bash
    git clone https://github.com/vanboompow/WorkLifeBalance.git
    cd WorkLifeBalance
-   git checkout macos-port
    ```
 
 2. **Open in Xcode**
