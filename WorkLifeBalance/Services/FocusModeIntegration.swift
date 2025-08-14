@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import Combine
+@preconcurrency import Combine
 import OSLog
 
 // MARK: - Focus Mode State
@@ -148,9 +148,7 @@ final class FocusModeIntegration: ObservableObject, Sendable {
         }
     }
     
-    deinit {
-        stopMonitoring()
-    }
+    // Cleanup is handled via invalidate() method called from MainActor context
     
     // MARK: - Initialization
     
@@ -169,7 +167,7 @@ final class FocusModeIntegration: ObservableObject, Sendable {
                 await startMonitoring()
             }
             
-            logger.info("Focus Mode Integration initialized - Supported: \(isSupported)")
+            logger.info("Focus Mode Integration initialized - Supported: \(self.isSupported)")
         } else {
             logger.warning("Focus Mode Integration not supported on this macOS version")
         }
@@ -178,7 +176,7 @@ final class FocusModeIntegration: ObservableObject, Sendable {
     // MARK: - Public API
     
     /// Publisher for focus mode change events
-    nonisolated var focusModeChanges: AnyPublisher<FocusModeChangeEvent, Never> {
+    var focusModeChanges: AnyPublisher<FocusModeChangeEvent, Never> {
         focusModeChangeSubject.eraseToAnyPublisher()
     }
     
@@ -255,7 +253,7 @@ final class FocusModeIntegration: ObservableObject, Sendable {
     }
     
     /// Stream of focus mode states
-    nonisolated func focusModeStates() -> AsyncStream<FocusModeInfo> {
+    func focusModeStates() -> AsyncStream<FocusModeInfo> {
         AsyncStream { continuation in
             let cancellable = focusModeChangeSubject
                 .map { $0.currentMode }
@@ -263,7 +261,7 @@ final class FocusModeIntegration: ObservableObject, Sendable {
                     continuation.yield(mode)
                 }
             
-            continuation.onTermination = { _ in
+            continuation.onTermination = { @Sendable _ in
                 cancellable.cancel()
             }
         }
@@ -291,9 +289,9 @@ final class FocusModeIntegration: ObservableObject, Sendable {
             forName: .init("com.apple.donotdisturb.state.changed"),
             object: nil,
             queue: .main
-        ) { [weak self] notification in
+        ) { [weak self] _ in
             Task { @MainActor in
-                await self?.handleFocusModeNotification(notification)
+                await self?.updateFocusMode()
             }
         }
         
@@ -301,19 +299,15 @@ final class FocusModeIntegration: ObservableObject, Sendable {
     }
     
     private func setupPollingTimer() {
-        pollingTimer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
+        pollingTimer = Timer.scheduledTimer(withTimeInterval: self.pollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.updateFocusMode()
             }
         }
         
-        logger.debug("Set up Focus Mode polling timer (interval: \(pollingInterval)s)")
+        logger.debug("Set up Focus Mode polling timer (interval: \(self.pollingInterval)s)")
     }
     
-    private func handleFocusModeNotification(_ notification: Notification) async {
-        logger.debug("Received Focus Mode change notification")
-        await updateFocusMode()
-    }
     
     private func updateFocusMode() async {
         let newMode = await detectCurrentFocusMode()

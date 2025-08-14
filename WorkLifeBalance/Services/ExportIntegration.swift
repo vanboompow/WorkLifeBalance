@@ -48,12 +48,12 @@ extension AppStateManager {
     
     /// Generate a summary report for today
     func generateTodaysSummary() async throws -> String {
-        let databaseManager = DatabaseManager()
+        let databaseManager = await DatabaseManager()
         let today = Date()
         let startOfDay = Calendar.current.startOfDay(for: today)
         let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) ?? today
         
-        let summary = databaseManager.getSummaryStatistics(from: startOfDay, to: endOfDay)
+        let summary = try await databaseManager.getSummaryStatistics(from: startOfDay, to: endOfDay)
         
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
@@ -78,6 +78,7 @@ extension AppStateManager {
 extension NSMenu {
     
     /// Add export menu items to the app's menu
+    @MainActor
     static func createExportMenu() -> NSMenu {
         let exportMenu = NSMenu(title: "Export")
         

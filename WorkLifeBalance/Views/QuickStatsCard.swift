@@ -87,7 +87,7 @@ struct QuickStatsCard: View {
                     if let subtitle = subtitle {
                         Text(subtitle)
                             .font(.system(.caption, design: .rounded))
-                            .foregroundColor(.tertiary)
+                            .foregroundColor(Color.secondary)
                     }
                 }
                 

@@ -95,7 +95,7 @@ final class AppStateManager: ObservableObject, Sendable {
         formatTime(idleTime)
     }
     
-    nonisolated init() {
+    init() {
         Task { @MainActor in
             await initialize()
         }
@@ -154,27 +154,25 @@ final class AppStateManager: ObservableObject, Sendable {
             try? await Task.sleep(for: .seconds(1))
             
             await MainActor.run {
-                updateState()
-                updateTime()
+                self.updateState()
+                self.updateTime()
             }
         }
     }
     
     private func updateState() {
-        let previousState = currentState
-        
         // Check for idle
-        if let idleTime = activityMonitor?.currentIdleTime, idleTime > 300 {
-            if currentState != .idle {
-                changeState(to: .idle)
+        if let idleTime = self.activityMonitor?.currentIdleTime, idleTime > 300 {
+            if self.currentState != .idle {
+                self.changeState(to: .idle)
             }
             return
         }
         
         // Check focus mode integration
-        if focusModeIntegration.isWorkFocusActive {
-            if currentState != .working {
-                changeState(to: .working)
+        if self.focusModeIntegration.isWorkFocusActive {
+            if self.currentState != .working {
+                self.changeState(to: .working)
             }
             return
         }
@@ -182,19 +180,19 @@ final class AppStateManager: ObservableObject, Sendable {
         // Check active app for work detection
         if UserDefaults.standard.bool(forKey: "autoDetectWork") {
             Task {
-                if let appInfo = await activityMonitor?.getCurrentApplication() {
+                if let appInfo = await self.activityMonitor?.getCurrentApplication() {
                     let workingApps = UserDefaults.standard.string(forKey: "workingApps") ?? ""
                     let appsList = workingApps.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
                     
                     if let appName = appInfo.name, appsList.contains(appName) {
-                        if currentState != .working {
+                        if self.currentState != .working {
                             await MainActor.run {
-                                changeState(to: .working)
+                                self.changeState(to: .working)
                             }
                         }
-                    } else if currentState == .working {
+                    } else if self.currentState == .working {
                         await MainActor.run {
-                            changeState(to: .resting)
+                            self.changeState(to: .resting)
                         }
                     }
                 }
@@ -330,75 +328,75 @@ final class AppStateManager: ObservableObject, Sendable {
     }
     
     private func loadTodayData() async {
-        logger.debug("Loading today's data")
+        self.logger.debug("Loading today's data")
         
         do {
-            if let data = try await databaseManager?.getTodayData() {
-                workTime = data.workTime
-                restTime = data.restTime
-                idleTime = data.idleTime
-                logger.debug("Today's data loaded: Work=\(workTime)s, Rest=\(restTime)s, Idle=\(idleTime)s")
+            if let data = try await self.databaseManager?.getTodayData() {
+                self.workTime = data.workTime
+                self.restTime = data.restTime
+                self.idleTime = data.idleTime
+                self.logger.debug("Today's data loaded: Work=\(self.workTime)s, Rest=\(self.restTime)s, Idle=\(self.idleTime)s")
             } else {
                 // No data for today - start fresh
-                workTime = 0
-                restTime = 0
-                idleTime = 0
-                logger.debug("No data for today - starting fresh")
+                self.workTime = 0
+                self.restTime = 0
+                self.idleTime = 0
+                self.logger.debug("No data for today - starting fresh")
             }
         } catch {
-            logger.error("Failed to load today's data: \(error.localizedDescription)")
+            self.logger.error("Failed to load today's data: \(error.localizedDescription)")
         }
     }
     
     private func saveToDatabase() async {
         do {
-            try await databaseManager?.saveTimeEntry(
-                state: currentState,
-                workTime: workTime,
-                restTime: restTime,
-                idleTime: idleTime
+            try await self.databaseManager?.saveTimeEntry(
+                state: self.currentState,
+                workTime: self.workTime,
+                restTime: self.restTime,
+                idleTime: self.idleTime
             )
-            logger.debug("Time entry saved to database")
+            self.logger.debug("Time entry saved to database")
         } catch {
-            logger.error("Failed to save time entry: \(error.localizedDescription)")
+            self.logger.error("Failed to save time entry: \(error.localizedDescription)")
         }
     }
     
     func saveCurrentSession() async {
-        logger.info("Saving current session")
+        self.logger.info("Saving current session")
         
         // Save current session data before quitting
-        await saveToDatabase()
+        await self.saveToDatabase()
         
         // Stop monitoring
-        await stopMonitoring()
+        await self.stopMonitoring()
         
         // Cleanup
-        cleanup()
+        self.cleanup()
         
-        logger.info("Session data saved. Work: \(self.formattedWorkTime), Rest: \(self.formattedRestTime), Idle: \(self.formattedIdleTime)")
+        self.logger.info("Session data saved. Work: \(self.formattedWorkTime), Rest: \(self.formattedRestTime), Idle: \(self.formattedIdleTime)")
     }
     
     private func setupIntegrations() async {
         // Setup activity monitor events
-        if let monitor = activityMonitor {
+        if let monitor = self.activityMonitor {
             monitor.activityPublisher
                 .sink { [weak self] event in
                     Task { @MainActor in
                         await self?.handleActivityEvent(event)
                     }
                 }
-                .store(in: &cancellables)
+                .store(in: &self.cancellables)
         }
         
         // Setup focus mode integration
-        focusModeIntegration.focusModeChanges
+        self.focusModeIntegration.focusModeChanges
             .sink { [weak self] event in
                 Task { @MainActor in
                     await self?.handleFocusModeChange(event)
                 }
             }
-            .store(in: &cancellables)
+            .store(in: &self.cancellables)
     }
     
     private func handleActivityEvent(_ event: ActivityEvent) async {
@@ -430,10 +428,10 @@ final class AppStateManager: ObservableObject, Sendable {
     
     private nonisolated func cleanup() {
         Task { @MainActor in
-            updateTask?.cancel()
-            updateTask = nil
-            cancellables.removeAll()
-            logger.info("AppStateManager cleaned up")
+            self.updateTask?.cancel()
+            self.updateTask = nil
+            self.cancellables.removeAll()
+            self.logger.info("AppStateManager cleaned up")
         }
     }
 }

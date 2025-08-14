@@ -38,7 +38,7 @@ class ReportGenerator {
         
         // Create PDF context
         var mediaBox = CGRect(origin: .zero, size: pageSize)
-        guard let pdfContext = CGContext(url: fileURL as CFURL, mediaBox: &mediaBox, nil) else {
+        guard let pdfContext = CGContext(fileURL as CFURL, mediaBox: &mediaBox, nil) else {
             throw ExportError.fileCreationFailed
         }
         
@@ -47,7 +47,7 @@ class ReportGenerator {
         pageNumber = 1
         
         // Start creating the PDF
-        pdfContext.beginPDFPage(nil)
+        pdfContext.beginPDFPage(nil as CFDictionary?)
         
         // Generate report content
         await generateReportContent(data: data, configuration: configuration)
@@ -161,7 +161,7 @@ class ReportGenerator {
         let totalWorkTime = data.dayStatistics.reduce(0) { $0 + $1.totalWorkTime }
         let totalRestTime = data.dayStatistics.reduce(0) { $0 + $1.totalRestTime }
         let totalIdleTime = data.dayStatistics.reduce(0) { $0 + $1.totalIdleTime }
-        let totalTime = totalWorkTime + totalRestTime + totalIdleTime
+        let _ = totalWorkTime + totalRestTime + totalIdleTime // Total time for potential future use
         let averageProductivity = data.dayStatistics.isEmpty ? 0 : 
             data.dayStatistics.reduce(0) { $0 + $1.productivityPercentage } / Double(data.dayStatistics.count)
         let totalSessions = data.dayStatistics.reduce(0) { $0 + $1.sessions.count }

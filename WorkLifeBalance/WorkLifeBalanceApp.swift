@@ -108,8 +108,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func openSettings() {
-        Task {
-            await AppStateManager.shared.showSettings()
+        Task { @MainActor in
+            AppStateManager.shared.showSettings()
         }
     }
     

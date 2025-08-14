@@ -19,6 +19,7 @@ enum ExportError: LocalizedError {
     case permissionDenied
     case diskSpaceInsufficient
     case dataCorrupted
+    case databaseUnavailable
     case unknownError(String)
     
     var errorDescription: String? {
@@ -37,6 +38,8 @@ enum ExportError: LocalizedError {
             return "Insufficient disk space to create the export file."
         case .dataCorrupted:
             return "Data appears to be corrupted and cannot be exported."
+        case .databaseUnavailable:
+            return "Database is not available for export."
         case .unknownError(let message):
             return "Export failed: \(message)"
         }
@@ -81,16 +84,21 @@ struct ExportMetadata {
 class ExportManager: ObservableObject {
     static let shared = ExportManager()
     
-    private let databaseManager = DatabaseManager()
+    private var databaseManager: DatabaseManager?
     private let reportGenerator = ReportGenerator()
     private let fileManager = FileManager.default
     
     @Published var isExporting = false
     @Published var exportProgress: Double = 0.0
     
-    private init() {}
+    private init() {
+        Task {
+            self.databaseManager = try? await DatabaseManager.create()
+        }
+    }
     
     // MARK: - Main Export Function
+    @MainActor
     func exportData(
         configuration: ExportConfiguration,
         progressHandler: @escaping (Double) async -> Void
@@ -143,19 +151,23 @@ class ExportManager: ObservableObject {
         let startDate = configuration.effectiveStartDate
         let endDate = configuration.effectiveEndDate
         
+        guard let databaseManager = self.databaseManager else {
+            throw ExportError.databaseUnavailable
+        }
+        
         // Check if database has data for the range
-        guard databaseManager.hasDataInRange(from: startDate, to: endDate) else {
+        guard try await databaseManager.hasDataInRange(from: startDate, to: endDate) else {
             throw ExportError.noDataFound
         }
         
         // Get time entries from database (legacy format)
-        let timeEntries = databaseManager.getDataForDateRange(from: startDate, to: endDate)
+        let timeEntries = try await databaseManager.getDataForDateRange(from: startDate, to: endDate)
         
         // Get daily statistics (new format) - this will use the extended DatabaseManager methods
-        let dayStatistics = databaseManager.getDailyStatistics(from: startDate, to: endDate)
+        let dayStatistics = try await databaseManager.getDailyStatistics(from: startDate, to: endDate)
         
         // Get user preferences if requested
-        let userPreferences = configuration.includeSettings ? PreferencesManager.shared.preferences : nil
+        let userPreferences: UserPreferences? = nil // TODO: Implement PreferencesManager
         
         // Create metadata
         let metadata = ExportMetadata(dayStatistics: dayStatistics, timeEntries: timeEntries)
@@ -349,7 +361,8 @@ class ExportManager: ObservableObject {
         configuration: ExportConfiguration, 
         filename: String
     ) async throws -> URL {
-        return try await reportGenerator.generateReport(
+        let generator = ReportGenerator()
+        return try await generator.generateReport(
             data: data, 
             configuration: configuration, 
             filename: filename

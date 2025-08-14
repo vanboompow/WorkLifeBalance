@@ -62,7 +62,7 @@ final class DatabaseManager: Sendable {
     
     init() {
         Task {
-            await setupDatabase()
+            try? await setupDatabase()
         }
     }
     
@@ -325,11 +325,10 @@ final class DatabaseManager: Sendable {
             }
             
             // Get database file size
-            if let dbPath = db.description {
-                let url = URL(fileURLWithPath: dbPath)
-                if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) {
-                    databaseSize = attributes[.size] as? Int64 ?? 0
-                }
+            let dbPath = db.description
+            let url = URL(fileURLWithPath: dbPath)
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) {
+                databaseSize = attributes[.size] as? Int64 ?? 0
             }
         } catch {
             logger.error("Error getting database info: \(error.localizedDescription)")
@@ -350,7 +349,7 @@ final class DatabaseManager: Sendable {
     private func generateSessionsForDay(_ date: Date, workTime: TimeInterval, restTime: TimeInterval, idleTime: TimeInterval) async -> [WorkSession] {
         var sessions: [WorkSession] = []
         let calendar = Calendar.current
-        var currentTime = calendar.startOfDay(for: date)
+        let currentTime = calendar.startOfDay(for: date)
         
         // This is a simplified approach since we don't store actual session data
         // In a real implementation, you would store session start/end times in the database

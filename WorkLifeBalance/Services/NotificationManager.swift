@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 import OSLog
 
 // MARK: - Notification Types
@@ -382,7 +382,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Obs
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         // Show notifications even when app is in foreground
-        completionHandler([.alert, .sound, .badge])
+        completionHandler([.banner, .sound, .badge])
         
         Task { @MainActor in
             logger.debug("Will present notification: \(notification.request.identifier)")
@@ -396,8 +396,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Obs
     ) {
         Task { @MainActor in
             await handleNotificationResponse(response)
-            completionHandler()
         }
+        completionHandler()
     }
     
     private func handleNotificationResponse(_ response: UNNotificationResponse) async {

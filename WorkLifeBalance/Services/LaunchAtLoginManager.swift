@@ -61,7 +61,7 @@ final class LaunchAtLoginManager: ObservableObject, Sendable {
         // Verify actual status with the system
         await updateStatus()
         
-        logger.info("LaunchAtLoginManager initialized - Status: \(isEnabled)")
+        logger.info("LaunchAtLoginManager initialized - Status: \(self.isEnabled)")
     }
     
     // MARK: - Public API
@@ -118,7 +118,7 @@ final class LaunchAtLoginManager: ObservableObject, Sendable {
             userDefaults.set(actualStatus, forKey: launchAtLoginKey)
         }
         
-        logger.debug("Launch at login status updated: \(isEnabled)")
+        logger.debug("Launch at login status updated: \(self.isEnabled)")
     }
     
     // MARK: - Modern Implementation (macOS 13+)
@@ -161,7 +161,7 @@ final class LaunchAtLoginManager: ObservableObject, Sendable {
                 logger.error("App service not found")
                 return false
             @unknown default:
-                logger.warning("Unknown launch at login status: \(status)")
+                self.logger.warning("Unknown launch at login status")
                 return false
             }
         }
@@ -284,7 +284,7 @@ extension LaunchAtLoginManager {
                     do {
                         try await self.setEnabled(enabled)
                     } catch {
-                        logger.error("Failed to update launch at login from binding: \(error.localizedDescription)")
+                        self.logger.error("Failed to update launch at login from binding: \(error.localizedDescription)")
                     }
                 }
             }

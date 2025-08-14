@@ -142,12 +142,14 @@ class MenuBarManager: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var appState: AppStateManager
     
+    @MainActor
     init(appState: AppStateManager) {
         self.appState = appState
         super.init()
         setupMenuBar()
     }
     
+    @MainActor
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
@@ -169,6 +171,7 @@ class MenuBarManager: NSObject, ObservableObject {
         }
     }
     
+    @MainActor
     func updateIcon() {
         // Force update of the menu bar view when state changes
         if let button = statusItem?.button {
@@ -236,22 +239,22 @@ extension MenuBarManager: NSMenuDelegate {
     
     @MainActor
     @objc private func startWork() {
-        Task {
-            await appState.startWork()
+        Task { @MainActor in
+            appState.startWork()
         }
     }
     
     @MainActor
     @objc private func takeBreak() {
-        Task {
-            await appState.startRest()
+        Task { @MainActor in
+            appState.startRest()
         }
     }
     
     @MainActor
     @objc private func showSettings() {
-        Task {
-            await appState.showSettings()
+        Task { @MainActor in
+            appState.showSettings()
         }
     }
     

@@ -238,9 +238,9 @@ final class ActivityMonitor: ObservableObject, Sendable {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor in
-                await self?.handleApplicationChange(notification)
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.handleApplicationChange()
             }
         }
     }
@@ -264,8 +264,8 @@ final class ActivityMonitor: ObservableObject, Sendable {
         activitySubject.send(.mouseActivity(mousePosition))
     }
     
-    private func handleApplicationChange(_ notification: Notification) async {
-        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
+    private func handleApplicationChange() async {
+        guard let app = NSWorkspace.shared.frontmostApplication else {
             return
         }
         
