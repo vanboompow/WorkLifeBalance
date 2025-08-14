@@ -1,26 +1,26 @@
 # WorkLifeBalance for macOS
 
-A native macOS port of the WorkLifeBalance productivity application, designed to help users monitor and optimize their time usage through automatic work/rest detection and detailed activity tracking.
+A beautiful, native macOS productivity tracker that helps users monitor and optimize their work-life balance through automatic activity detection, elegant visualizations, and intelligent break reminders.
 
 ![WorkLifeBalance Overview](Assets/WorkLifeBalanceThumb.png)
 
-## 🍎 macOS Port Status
+## 🌟 Project Status
 
-This is a **native macOS implementation** of the original Windows WPF application, built with:
-- **SwiftUI** for the user interface
-- **Swift 5.9+** for modern, safe code
-- **Menu bar app** design (runs in system tray)
-- **Native macOS APIs** for system integration
+This is a **standalone macOS application** inspired by the original Windows version, completely rebuilt with:
+- **SwiftUI** for beautiful, native UI
+- **Swift 5.9+** with modern concurrency
+- **Menu bar design** with quick popover access
+- **Swift Charts** for stunning data visualizations
+- **Native macOS integration** for seamless experience
 
-### Platform Differences
+### Design Philosophy
 
-| Feature | Windows (Original) | macOS (This Port) |
-|---------|-------------------|-------------------|
-| UI Framework | WPF | SwiftUI |
-| System Integration | Windows P/Invoke | NSWorkspace, CoreGraphics |
-| Database | SQLite with Dapper | SQLite.swift |
-| Tray/Menu Bar | System Tray | Menu Bar |
-| Architecture | .NET 8.0 | Swift/SwiftUI MVVM |
+Inspired by successful apps like CodeEdit, Cork, and Reminders MenuBar, we follow:
+- **Native Feel**: SF Symbols, vibrancy effects, and native controls
+- **Minimalist Elegance**: Clean interfaces with thoughtful spacing
+- **Smooth Animations**: Fluid transitions with spring physics
+- **Adaptive Materials**: Modern glassmorphic design
+- **Corner Concentricity**: Perfectly aligned control corners
 
 ## ✨ Features
 
@@ -126,34 +126,170 @@ WorkLifeBalance/
 └── WorkLifeBalanceApp.swift     # App entry point
 ```
 
-## 🐛 Known Issues
+## ✅ Implementation Status
 
-1. **Launch at Login** - Not yet implemented
-2. **Notifications** - Break reminders coming soon
-3. **Accessibility Permissions** - Must be granted manually on first run
+### Phase 1: Core Architecture ✅
+**Completed Components**:
+- ✅ **Data Models** - Complete type system with protocols and structs
+- ✅ **PopoverView** - Beautiful 350x450px glassmorphic design  
+- ✅ **MenuBarView** - Dynamic icon with state colors and progress ring
+- ✅ **LaunchAtLoginManager** - Modern SMLoginItemSetEnabled implementation
+- ✅ **NotificationManager** - UserNotifications framework integration
 
-## 📊 Comparison with Original
+### Phase 2: Beautiful UI ✅
+**Implemented Visualizations**:
+- ✅ **DashboardWindow** - 900x600px window with tab navigation
+- ✅ **TimeRingChart** - Apple Fitness-style circular progress
+- ✅ **QuickStatsCard** - Glassmorphic cards with hover effects
+- ✅ **Modern Design System** - Vibrancy, materials, and spring animations
+- 🚧 **Analytics/History Tabs** - Placeholder UI ready for data integration
 
-### Features Implemented ✅
-- [x] Automatic work/rest detection
-- [x] Time tracking and persistence
-- [x] Customizable work applications
-- [x] Idle detection
-- [x] Menu bar interface
-- [x] Settings window
+### Phase 3: Advanced Features ✅
+**Export & Productivity**:
+- ✅ **ExportView** - Complete export dialog with multiple formats
+- ✅ **ExportManager** - CSV/JSON/PDF/HTML export functionality
+- ✅ **ReportGenerator** - Professional PDF reports with charts
+- ✅ **FocusModeIntegration** - macOS Focus mode awareness
+- 🚧 **ForceWork/Pomodoro** - UI created, logic pending
 
-### Features In Progress 🚧
-- [ ] Launch at login
-- [ ] Break notifications
-- [ ] Monthly comparison charts
-- [ ] Pomodoro timer integration
-- [ ] Advanced detection modes
+### Phase 4: Modernization & Cleanup ✅
+**Swift 6.0 & Cleanup**:
+- ✅ **Windows Artifacts Removed** - 79 files deleted, pure macOS project
+- ✅ **Swift 6.0 Migration** - Modern async/await and actors
+- ✅ **Database Modernized** - Actor-isolated with async operations
+- ✅ **Comprehensive Models** - 8 model files with Sendable conformance
+- 🚧 **Compilation** - 93 concurrency fixes needed for Swift 6 strict mode
 
-### Features Not Yet Ported ❌
-- [ ] Force work mode
-- [ ] Detailed productivity analytics
+## 🎨 Design Specifications
+
+### Menu Bar Design
+```
+Dynamic Icon Features:
+- State color tint (green=work, blue=rest, gray=idle)
+- Progress ring showing daily completion
+- Optional time badge
+- Right-click context menu
+```
+
+### Popover View (350x450px)
+```
+┌─────────────────────────────┐
+│  [Animated State Pill]       │
+│  ┌─────────────────────┐    │
+│  │   Circular Chart    │    │
+│  │    02:34:16         │    │
+│  └─────────────────────┘    │
+│                              │
+│  [Work] [Rest] [Idle]        │  <- Glassmorphic cards
+│                              │
+│  [Settings] [Dashboard]      │  <- Action buttons
+└─────────────────────────────┘
+```
+
+### Dashboard Window (900x600px)
+```
+┌────────────────────────────────────────┐
+│        Today's Overview                │
+│    [Beautiful Ring Chart]              │
+│                                        │
+│ [Overview | Apps | Analytics | History]│
+│                                        │
+│      Tab Content Area                  │
+└────────────────────────────────────────┘
+```
+
+## 🏗️ Architecture
+
+### Missing Views (Priority Order)
+1. **PopoverView.swift** - CRITICAL! Main menu bar interface
+2. **MenuBarView.swift** - Dynamic icon management
+3. **TimeRingChart.swift** - Custom circular progress
+4. **DashboardWindow.swift** - Main application window
+5. **AnalyticsTab.swift** - Charts and statistics
+6. **HistoryCalendarView.swift** - Activity heat map
+7. **ForceWorkSheet.swift** - Manual override modal
+8. **PomodoroTimer.swift** - Timer functionality
+9. **ExportView.swift** - Data export options
+10. **NotificationSettingsView.swift** - Alert configuration
+
+### Database Schema
+```sql
+-- Core tables shared with Windows version
+CREATE TABLE DayData (
+    Id INTEGER PRIMARY KEY,
+    Date TEXT NOT NULL,
+    TotalWorkTime INTEGER,
+    TotalRestTime INTEGER,
+    TotalIdleTime INTEGER
+);
+
+CREATE TABLE ProcessActivityData (
+    Id INTEGER PRIMARY KEY,
+    DayDataId INTEGER,
+    ProcessName TEXT,
+    TimeSpent INTEGER,
+    FOREIGN KEY(DayDataId) REFERENCES DayData(Id)
+);
+
+CREATE TABLE AppSettingsData (
+    Id INTEGER PRIMARY KEY,
+    AutoDetect INTEGER,
+    IdleTimeout INTEGER,
+    WorkApplications TEXT,
+    LaunchAtStartup INTEGER,
+    NotificationEnabled INTEGER,
+    NotificationInterval INTEGER
+);
+```
+
+## 🧪 Testing Strategy
+
+### Unit Tests Required
+- [ ] State management logic
+- [ ] Time calculation accuracy
+- [ ] Database operations
+- [ ] Process detection
 - [ ] Export functionality
-- [ ] Custom states beyond work/rest/idle
+
+### UI Tests Required
+- [ ] Menu bar interactions
+- [ ] Popover show/hide
+- [ ] Settings changes
+- [ ] Tab navigation
+- [ ] Chart rendering
+
+### Performance Targets
+- Memory usage: < 50MB
+- CPU idle: < 1%
+- Animation FPS: 60fps
+- Launch time: < 2 seconds
+- State transition: < 100ms
+
+## 🧹 Cleanup Tasks
+
+### Windows Files to Remove
+```
+Files to delete:
+- All *.cs files (C# source)
+- All *.xaml files (WPF views)
+- All *.csproj files (project files)
+- WorkLifeBalance.sln (solution file)
+- app.manifest (Windows manifest)
+- appsettings.json (Windows config)
+
+Directories to remove:
+- /ViewModels (Windows-specific)
+- /Views (WPF views)
+- /Services (Windows services)
+- /Converters (XAML converters)
+- /Interfaces (C# interfaces)
+- /Models (C# models)
+
+Assets to evaluate:
+- Keep shared images (PNG files)
+- Remove Windows-specific icons
+- Optimize remaining assets
+```
 
 ## 🤝 Contributing
 

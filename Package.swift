@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -13,7 +13,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.14.0"),
+        .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.0"),
     ],
     targets: [
         .executableTarget(
@@ -21,11 +21,22 @@ let package = Package(
             dependencies: [
                 .product(name: "SQLite", package: "SQLite.swift"),
             ],
-            path: "WorkLifeBalance"
+            path: "WorkLifeBalance",
+            swiftSettings: [
+                .enableUpcomingFeature("BareSlashRegexLiterals"),
+                .enableUpcomingFeature("ConciseMagicFile"),
+                .enableUpcomingFeature("ForwardTrailingClosures"),
+                .enableUpcomingFeature("ImplicitOpenExistentials"),
+                .enableUpcomingFeature("StrictConcurrency"),
+                .enableUpcomingFeature("DisableOutwardActorInference")
+            ]
         ),
         .testTarget(
             name: "WorkLifeBalanceTests",
-            dependencies: ["WorkLifeBalance"]
+            dependencies: ["WorkLifeBalance"],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency")
+            ]
         ),
     ]
 )

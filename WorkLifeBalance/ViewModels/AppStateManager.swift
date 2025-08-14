@@ -7,11 +7,14 @@ import Foundation
 import SwiftUI
 import Combine
 import AppKit
+import OSLog
+import Observation
 
-enum WorkState {
-    case working
-    case resting
-    case idle
+// MARK: - Work State
+enum WorkState: String, Codable, CaseIterable, Sendable {
+    case working = "working"
+    case resting = "resting"
+    case idle = "idle"
     
     var description: String {
         switch self {
@@ -28,20 +31,57 @@ enum WorkState {
         case .idle: return .gray
         }
     }
+    
+    var systemImageName: String {
+        switch self {
+        case .working: return "laptop.and.pencil"
+        case .resting: return "cup.and.saucer"
+        case .idle: return "moon.zzz"
+        }
+    }
 }
 
-class AppStateManager: ObservableObject {
+// MARK: - App State Manager Errors
+enum AppStateError: Error, LocalizedError {
+    case databaseError(String)
+    case activityMonitorError(String)
+    case configurationError(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .databaseError(let message):
+            return "Database error: \(message)"
+        case .activityMonitorError(let message):
+            return "Activity monitor error: \(message)"
+        case .configurationError(let message):
+            return "Configuration error: \(message)"
+        }
+    }
+}
+
+// MARK: - Modern App State Manager
+@MainActor
+@Observable
+final class AppStateManager: ObservableObject, Sendable {
     static let shared = AppStateManager()
     
-    @Published var currentState: WorkState = .idle
-    @Published var workTime: TimeInterval = 0
-    @Published var restTime: TimeInterval = 0
-    @Published var idleTime: TimeInterval = 0
+    // MARK: - Observable State
+    var currentState: WorkState = .idle
+    var workTime: TimeInterval = 0
+    var restTime: TimeInterval = 0
+    var idleTime: TimeInterval = 0
+    var isMonitoring: Bool = false
+    var lastStateChange: Date = Date()
     
-    private var stateTimer: Timer?
+    // MARK: - Private Properties
+    private let logger = Logger(subsystem: "WorkLifeBalance", category: "AppState")
+    private var updateTask: Task<Void, Never>?
     private var activityMonitor: ActivityMonitor?
     private var databaseManager: DatabaseManager?
     private var settingsWindow: NSWindow?
+    private let focusModeIntegration = FocusModeIntegration.shared
+    private let notificationManager = NotificationManager.shared
+    private var cancellables = Set<AnyCancellable>()
     
     var formattedWorkTime: String {
         formatTime(workTime)
@@ -55,63 +95,123 @@ class AppStateManager: ObservableObject {
         formatTime(idleTime)
     }
     
-    private init() {
-        setupMonitoring()
-        loadTodayData()
+    nonisolated init() {
+        Task { @MainActor in
+            await initialize()
+        }
     }
     
     deinit {
-        // Clean up resources
-        stateTimer?.invalidate()
-        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        cleanup()
     }
     
-    private func setupMonitoring() {
-        activityMonitor = ActivityMonitor()
-        databaseManager = DatabaseManager()
+    private func initialize() async {
+        logger.info("Initializing AppStateManager")
         
-        // Start monitoring
-        startStateTimer()
-        
-        // Monitor app changes
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(activeAppChanged),
-            name: NSWorkspace.didActivateApplicationNotification,
-            object: nil
-        )
+        do {
+            // Initialize components
+            databaseManager = try await DatabaseManager.create()
+            activityMonitor = ActivityMonitor()
+            
+            // Load today's data
+            await loadTodayData()
+            
+            // Start monitoring
+            await startMonitoring()
+            
+            // Setup integrations
+            await setupIntegrations()
+            
+            logger.info("AppStateManager initialized successfully")
+        } catch {
+            logger.error("Failed to initialize AppStateManager: \(error.localizedDescription)")
+        }
     }
     
-    private func startStateTimer() {
-        stateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            self.updateState()
-            self.updateTime()
+    private func startMonitoring() async {
+        guard !isMonitoring else { return }
+        
+        logger.info("Starting activity monitoring")
+        
+        // Start activity monitoring
+        do {
+            try await activityMonitor?.startMonitoring()
+        } catch {
+            logger.error("Failed to start activity monitoring: \(error.localizedDescription)")
+        }
+        
+        // Start periodic updates using modern async timer
+        updateTask = Task {
+            await startPeriodicUpdates()
+        }
+        
+        isMonitoring = true
+        logger.info("Activity monitoring started")
+    }
+    
+    private func startPeriodicUpdates() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(1))
+            
+            await MainActor.run {
+                updateState()
+                updateTime()
+            }
         }
     }
     
     private func updateState() {
+        let previousState = currentState
+        
         // Check for idle
-        if let idleSeconds = activityMonitor?.getIdleTime(), idleSeconds > 300 {
+        if let idleTime = activityMonitor?.currentIdleTime, idleTime > 300 {
             if currentState != .idle {
-                currentState = .idle
+                changeState(to: .idle)
+            }
+            return
+        }
+        
+        // Check focus mode integration
+        if focusModeIntegration.isWorkFocusActive {
+            if currentState != .working {
+                changeState(to: .working)
             }
             return
         }
         
         // Check active app for work detection
         if UserDefaults.standard.bool(forKey: "autoDetectWork") {
-            if let activeApp = NSWorkspace.shared.frontmostApplication?.localizedName {
-                let workingApps = UserDefaults.standard.string(forKey: "workingApps") ?? ""
-                let appsList = workingApps.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-                
-                if appsList.contains(activeApp) {
-                    if currentState != .working {
-                        currentState = .working
+            Task {
+                if let appInfo = await activityMonitor?.getCurrentApplication() {
+                    let workingApps = UserDefaults.standard.string(forKey: "workingApps") ?? ""
+                    let appsList = workingApps.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                    
+                    if let appName = appInfo.name, appsList.contains(appName) {
+                        if currentState != .working {
+                            await MainActor.run {
+                                changeState(to: .working)
+                            }
+                        }
+                    } else if currentState == .working {
+                        await MainActor.run {
+                            changeState(to: .resting)
+                        }
                     }
-                } else if currentState == .working {
-                    currentState = .resting
                 }
             }
+        }
+    }
+    
+    private func changeState(to newState: WorkState) {
+        let previousState = currentState
+        currentState = newState
+        lastStateChange = Date()
+        
+        logger.info("State changed: \(previousState.description) → \(newState.description)")
+        
+        // Handle state-specific actions
+        Task {
+            await handleStateChange(from: previousState, to: newState)
         }
     }
     
@@ -127,20 +227,77 @@ class AppStateManager: ObservableObject {
         
         // Save to database every minute
         if Int(workTime + restTime + idleTime) % 60 == 0 {
-            saveToDatabase()
+            Task {
+                await saveToDatabase()
+            }
         }
     }
     
-    @objc private func activeAppChanged() {
-        updateState()
+    private func handleStateChange(from previous: WorkState, to current: WorkState) async {
+        // Handle notifications
+        if previous == .working && current != .working {
+            // Work session ended
+            let sessionDuration = Date().timeIntervalSince(lastStateChange)
+            let productivity = calculateProductivity()
+            
+            do {
+                try await notificationManager.scheduleWorkSessionComplete(
+                    workTime: sessionDuration,
+                    productivity: productivity
+                )
+            } catch {
+                logger.error("Failed to schedule work session notification: \(error.localizedDescription)")
+            }
+        }
+        
+        if current == .idle && previous != .idle {
+            // User became idle - schedule alert if needed
+            do {
+                try await notificationManager.scheduleIdleAlert(idleTime: 0)
+            } catch {
+                logger.error("Failed to schedule idle alert: \(error.localizedDescription)")
+            }
+        }
+        
+        // Check daily goal achievement
+        let dailyGoal = UserDefaults.standard.double(forKey: "dailyWorkTimeGoal")
+        if dailyGoal > 0 && workTime >= dailyGoal && previous != .working {
+            do {
+                try await notificationManager.scheduleDailyGoalAchieved()
+            } catch {
+                logger.error("Failed to schedule daily goal notification: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func calculateProductivity() -> Double {
+        let totalTime = workTime + restTime + idleTime
+        guard totalTime > 0 else { return 0 }
+        return workTime / totalTime
     }
     
     func startWork() {
-        currentState = .working
+        changeState(to: .working)
     }
     
     func startRest() {
-        currentState = .resting
+        changeState(to: .resting)
+    }
+    
+    func stopMonitoring() async {
+        guard isMonitoring else { return }
+        
+        logger.info("Stopping activity monitoring")
+        
+        // Cancel update task
+        updateTask?.cancel()
+        updateTask = nil
+        
+        // Stop activity monitor
+        activityMonitor?.stopMonitoring()
+        
+        isMonitoring = false
+        logger.info("Activity monitoring stopped")
     }
     
     func showSettings() {
@@ -172,21 +329,111 @@ class AppStateManager: ObservableObject {
         }
     }
     
-    private func loadTodayData() {
-        // Load today's data from database
-        if let data = databaseManager?.getTodayData() {
-            workTime = data.workTime
-            restTime = data.restTime
-            idleTime = data.idleTime
+    private func loadTodayData() async {
+        logger.debug("Loading today's data")
+        
+        do {
+            if let data = try await databaseManager?.getTodayData() {
+                workTime = data.workTime
+                restTime = data.restTime
+                idleTime = data.idleTime
+                logger.debug("Today's data loaded: Work=\(workTime)s, Rest=\(restTime)s, Idle=\(idleTime)s")
+            } else {
+                // No data for today - start fresh
+                workTime = 0
+                restTime = 0
+                idleTime = 0
+                logger.debug("No data for today - starting fresh")
+            }
+        } catch {
+            logger.error("Failed to load today's data: \(error.localizedDescription)")
         }
     }
     
-    private func saveToDatabase() {
-        databaseManager?.saveTimeEntry(
-            state: currentState,
-            workTime: workTime,
-            restTime: restTime,
-            idleTime: idleTime
-        )
+    private func saveToDatabase() async {
+        do {
+            try await databaseManager?.saveTimeEntry(
+                state: currentState,
+                workTime: workTime,
+                restTime: restTime,
+                idleTime: idleTime
+            )
+            logger.debug("Time entry saved to database")
+        } catch {
+            logger.error("Failed to save time entry: \(error.localizedDescription)")
+        }
+    }
+    
+    func saveCurrentSession() async {
+        logger.info("Saving current session")
+        
+        // Save current session data before quitting
+        await saveToDatabase()
+        
+        // Stop monitoring
+        await stopMonitoring()
+        
+        // Cleanup
+        cleanup()
+        
+        logger.info("Session data saved. Work: \(self.formattedWorkTime), Rest: \(self.formattedRestTime), Idle: \(self.formattedIdleTime)")
+    }
+    
+    private func setupIntegrations() async {
+        // Setup activity monitor events
+        if let monitor = activityMonitor {
+            monitor.activityPublisher
+                .sink { [weak self] event in
+                    Task { @MainActor in
+                        await self?.handleActivityEvent(event)
+                    }
+                }
+                .store(in: &cancellables)
+        }
+        
+        // Setup focus mode integration
+        focusModeIntegration.focusModeChanges
+            .sink { [weak self] event in
+                Task { @MainActor in
+                    await self?.handleFocusModeChange(event)
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func handleActivityEvent(_ event: ActivityEvent) async {
+        switch event {
+        case .userActivity:
+            // Update state based on activity
+            updateState()
+        case .idleStateChanged(let isIdle):
+            if isIdle && currentState != .idle {
+                changeState(to: .idle)
+            } else if !isIdle && currentState == .idle {
+                changeState(to: .resting)
+            }
+        case .applicationChanged:
+            // Update state based on new app
+            updateState()
+        case .mouseActivity:
+            break // Already handled by userActivity
+        }
+    }
+    
+    private func handleFocusModeChange(_ event: FocusModeChangeEvent) async {
+        if event.isWorkModeActivated {
+            changeState(to: .working)
+        } else if event.isWorkModeDeactivated {
+            changeState(to: .resting)
+        }
+    }
+    
+    private nonisolated func cleanup() {
+        Task { @MainActor in
+            updateTask?.cancel()
+            updateTask = nil
+            cancellables.removeAll()
+            logger.info("AppStateManager cleaned up")
+        }
     }
 }
